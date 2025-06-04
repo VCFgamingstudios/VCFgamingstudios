@@ -58,6 +58,11 @@
  * @default 15
  * @desc Default duration for camera pan.
 
+ * @param Crystal Save Slot
+ * @type number
+ * @default 1
+ * @desc Save slot used by SaveCrystal and BossCrystal commands.
+
  * @param Show HUD
  * @type boolean
  * @default true
@@ -117,6 +122,7 @@
     const enemyHpMult = Number(params['Enemy HP Multiplier'] || 1);
     const enemyLevelOffset = Number(params['Enemy Level Offset'] || 0);
     const defaultPanSpeed = Number(params['Camera Pan Speed'] || 15);
+    const crystalSaveSlot = Number(params['Crystal Save Slot'] || 1);
     const showHud = params['Show HUD'] !== 'false';
     const hudX = Number(params['HUD X'] || 10);
     const hudY = Number(params['HUD Y'] || 10);
@@ -286,7 +292,9 @@
     });
 
     PluginManager.registerCommand(pluginName, 'SaveCrystal', args => {
-        if (DataManager.saveGame(1)) {
+        const slot = crystalSaveSlot;
+        DataManager._lastAccessedId = slot;
+        if (DataManager.saveGame(slot)) {
             $gameMessage.add('Game saved.');
         }
     });
@@ -294,6 +302,25 @@
     PluginManager.registerCommand(pluginName, 'HealCrystal', args => {
         $gameParty.members().forEach(a => a.recoverAll());
         $gameMessage.add('Party fully healed.');
+    });
+
+    PluginManager.registerCommand(pluginName, 'RecoveryCrystal', args => {
+        $gameParty.members().forEach(a => a.recoverAll());
+        $gameMessage.add('Party fully healed.');
+    });
+
+    PluginManager.registerCommand(pluginName, 'BossCrystal', args => {
+        const slot = crystalSaveSlot;
+        DataManager._lastAccessedId = slot;
+        if (DataManager.saveGame(slot)) {
+            $gameParty.members().forEach(a => a.recoverAll());
+            respawnData = {
+                mapId: $gameMap.mapId(),
+                x: $gamePlayer.x,
+                y: $gamePlayer.y
+            };
+            $gameMessage.add('Checkpoint saved.');
+        }
     });
 
     PluginManager.registerCommand(pluginName, 'SetRespawn', args => {

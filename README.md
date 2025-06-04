@@ -23,7 +23,10 @@ This repository now includes a custom plugin `VCF_Core.js` located in the `plugi
 * Stamina drains while dashing or performing a smart jump
 * Dash key can be reassigned
 * `SaveCrystal` command for quick saving at crystals
-* `HealCrystal` command to fully restore the party
+* `HealCrystal`/`RecoveryCrystal` commands to fully restore the party
+* `BossCrystal` command to heal, save, and set a checkpoint at once
 * `SetRespawn` and `Respawn` commands to manage boss dungeon checkpoints
+
+Set the **Crystal Save Slot** parameter to choose which savefile ID these crystal commands use.
 
 Adjust the parameters in the plugin manager to suit your project and use the `PanCamera` command to smoothly move the camera to any tile coordinates.
