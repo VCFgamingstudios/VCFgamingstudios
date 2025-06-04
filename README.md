@@ -10,3 +10,16 @@
 VCFgamingstudios/VCFgamingstudios is a ✨ special ✨ repository because its `README.md` (this file) appears on your GitHub profile.
 You can click the Preview link to take a look at your changes.
 --->
+
+## VCF Core Engine for RPG Maker MZ
+
+This repository now includes a custom plugin `VCF_Core.js` located in the `plugins` folder. Copy the file into your project's `js/plugins` directory and enable it from the plugin manager. The plugin currently provides:
+
+* Fast-forward on maps using a configurable key
+* A smart jump action triggered by the "Jump Key"
+* Camera panning via the `PanCamera` plugin command
+* Parameters to raise the actor level cap and scale enemy HP
+* Optional HUD showing HP, MP, and stamina
+* Stamina drains while dashing or performing a smart jump
+
+Adjust the parameters in the plugin manager to suit your project and use the `PanCamera` command to smoothly move the camera to any tile coordinates.
