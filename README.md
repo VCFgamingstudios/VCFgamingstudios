@@ -21,5 +21,9 @@ This repository now includes a custom plugin `VCF_Core.js` located in the `plugi
 * Parameters to raise the actor level cap and scale enemy HP
 * Optional HUD showing HP, MP, and stamina
 * Stamina drains while dashing or performing a smart jump
+* Dash key can be reassigned
+* `SaveCrystal` command for quick saving at crystals
+* `HealCrystal` command to fully restore the party
+* `SetRespawn` and `Respawn` commands to manage boss dungeon checkpoints
 
 Adjust the parameters in the plugin manager to suit your project and use the `PanCamera` command to smoothly move the camera to any tile coordinates.

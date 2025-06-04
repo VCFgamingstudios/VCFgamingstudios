@@ -20,6 +20,15 @@
  * @option shift
  * @default pageup
  * @desc Press this key for a smart jump forward.
+
+ * @param Dash Key
+ * @text Dash Key
+ * @type select
+ * @option shift
+ * @option control
+ * @option tab
+ * @default shift
+ * @desc Hold this key to dash while moving.
  *
  * @param Jump Distance
  * @type number
@@ -102,6 +111,7 @@
     const params = PluginManager.parameters(pluginName);
     const fastKey = params['Fast Forward Key'] || 'shift';
     const jumpKey = params['Jump Key'] || 'pageup';
+    const dashKey = params['Dash Key'] || 'shift';
     const jumpDistance = Number(params['Jump Distance'] || 2);
     const maxActorLevel = Number(params['Max Actor Level'] || 99);
     const enemyHpMult = Number(params['Enemy HP Multiplier'] || 1);
@@ -114,6 +124,7 @@
     const dashCost = Number(params['Dash Stamina Cost'] || 1);
     const jumpCost = Number(params['Jump Stamina Cost'] || 20);
     const staminaRegen = Number(params['Stamina Regen'] || 0.5);
+    let respawnData = null;
 
     // ----------------------------------------------------------------------
     // Stamina management
@@ -142,7 +153,7 @@
     const _Game_Player_isDashButtonPressed = Game_Player.prototype.isDashButtonPressed;
     Game_Player.prototype.isDashButtonPressed = function() {
         if (this._stamina <= 0) return false;
-        return _Game_Player_isDashButtonPressed.call(this);
+        return Input.isPressed(dashKey) || _Game_Player_isDashButtonPressed.call(this);
     };
 
     // Fast-forward map updates
@@ -272,5 +283,30 @@
         const y = Number(args.y || $gamePlayer.y);
         const d = Number(args.duration || defaultPanSpeed);
         $gameMap.startCameraPan(x, y, d);
+    });
+
+    PluginManager.registerCommand(pluginName, 'SaveCrystal', args => {
+        if (DataManager.saveGame(1)) {
+            $gameMessage.add('Game saved.');
+        }
+    });
+
+    PluginManager.registerCommand(pluginName, 'HealCrystal', args => {
+        $gameParty.members().forEach(a => a.recoverAll());
+        $gameMessage.add('Party fully healed.');
+    });
+
+    PluginManager.registerCommand(pluginName, 'SetRespawn', args => {
+        respawnData = {
+            mapId: $gameMap.mapId(),
+            x: $gamePlayer.x,
+            y: $gamePlayer.y
+        };
+    });
+
+    PluginManager.registerCommand(pluginName, 'Respawn', args => {
+        if (respawnData) {
+            $gamePlayer.reserveTransfer(respawnData.mapId, respawnData.x, respawnData.y);
+        }
     });
 })();
