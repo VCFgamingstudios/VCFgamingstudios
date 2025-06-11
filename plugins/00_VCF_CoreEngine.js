@@ -79,6 +79,12 @@
  * @type string
  * @desc Display name for the Acquaintance category.
  * @default Acquaintance
+
+ * @param DashSpeedBoost
+ * @type number
+ * @decimals 2
+ * @desc Additional move speed while dashing.
+ * @default 0
  *
  * @help
  * This plugin introduces a basic set of systems used by the VCF projects.
@@ -102,6 +108,8 @@
  *   VCF_ADD_GOLD v         # Add v gold to party
  *   VCF_SET_RELATION a b type value  # Set relation points
  *   VCF_ADD_RELATION a b type value  # Add relation points
+ *   VCF_SET_DASH_SPEED value        # Change dash speed boost
+ *   VCF_HEAL_PARTY                  # Fully heal the party
  *
  * Plugin Parameters allow setting default limits for levels and stats.
  * A value of 0 uses the engine default instead of breaking the limit.
@@ -146,6 +154,8 @@
         rival: String(parameters['RivalLabel'] || 'Rival'),
         acquaintance: String(parameters['AcquaintanceLabel'] || 'Acquaintance')
     };
+
+    let dashSpeedBoost = Number(parameters['DashSpeedBoost'] || 0);
 
     // --------------------------------------------------
     // Notetag processing
@@ -235,6 +245,13 @@
         }
     };
 
+    const _Game_Player_realMoveSpeed = Game_Player.prototype.realMoveSpeed;
+    Game_Player.prototype.realMoveSpeed = function() {
+        let speed = _Game_Player_realMoveSpeed.call(this);
+        if (this.isDashing()) speed += dashSpeedBoost;
+        return speed;
+    };
+
     // Plugin commands (RPG Maker MZ)
 
     PluginManager.registerCommand(pluginName, 'VCF_DASH_ON', () => {
@@ -290,6 +307,14 @@
 
     PluginManager.registerCommand(pluginName, 'VCF_ADD_RELATION', args => {
         addRelation(Number(args.actorA), Number(args.actorB), String(args.type), Number(args.value));
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_SET_DASH_SPEED', args => {
+        dashSpeedBoost = Number(args.value || 0);
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_HEAL_PARTY', () => {
+        $gameParty.members().forEach(a => a.recoverAll());
     });
 
     function actorById(id) {
