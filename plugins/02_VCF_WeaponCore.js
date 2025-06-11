@@ -1,4 +1,5 @@
 /*:
+ * @target MZ
  * @plugindesc VCF Weapon Core - Adds weapon license progression and mythic relic features.
  * @author VCF
  *
@@ -24,7 +25,8 @@
  *   VCF_SET_LICENSE actorId rank   # Set actor license rank by number or name
  */
 (function() {
-    const params = PluginManager.parameters('VCF_WeaponCore');
+    const pluginName = 'VCF_WeaponCore';
+    const params = PluginManager.parameters(pluginName);
     const licenseNames = (params['LicenseNames'] || 'Beginner,Adept,Advanced,Master,Prodigy')
         .split(',').map(n => n.trim());
     const threshold = Number(params['LicenseThreshold'] || 25);
@@ -131,15 +133,11 @@
         }
     };
 
-    const _Game_Interpreter_pluginCommand = Game_Interpreter.prototype.pluginCommand;
-    Game_Interpreter.prototype.pluginCommand = function(command, args) {
-        _Game_Interpreter_pluginCommand.call(this, command, args);
-        if (command.toUpperCase() === 'VCF_SET_LICENSE') {
-            const actor = $gameActors.actor(Number(args[0]));
-            if (!actor) return;
-            const r = isNaN(args[1]) ? parseLicense(args[1]) : Number(args[1]);
-            actor._vcfLicenseRank = Math.max(0, Math.min(licenseNames.length - 1, r));
-            actor._vcfLicenseBattles = 0;
-        }
-    };
+    PluginManager.registerCommand(pluginName, 'VCF_SET_LICENSE', args => {
+        const actor = $gameActors.actor(Number(args.actorId));
+        if (!actor) return;
+        const r = isNaN(args.rank) ? parseLicense(args.rank) : Number(args.rank);
+        actor._vcfLicenseRank = Math.max(0, Math.min(licenseNames.length - 1, r));
+        actor._vcfLicenseBattles = 0;
+    });
 })();
