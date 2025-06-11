@@ -5,7 +5,7 @@
  * @param MaxLevel
  * @type number
  * @min 1
- * @desc Default maximum level for actors. 0 = unlimited
+ * @desc Default maximum level for actors. 0 = engine default
  * @default 99
  *
  * @param MinimalLevel
@@ -16,42 +16,42 @@
  *
  * @param MaxHP
  * @type number
- * @desc Default maximum HP. 0 = unlimited
+ * @desc Default maximum HP. 0 = engine default
  * @default 0
  *
  * @param MaxMP
  * @type number
- * @desc Default maximum MP. 0 = unlimited
+ * @desc Default maximum MP. 0 = engine default
  * @default 0
  *
  * @param MaxATK
  * @type number
- * @desc Default maximum ATK. 0 = unlimited
+ * @desc Default maximum ATK. 0 = engine default
  * @default 0
  *
  * @param MaxDEF
  * @type number
- * @desc Default maximum DEF. 0 = unlimited
+ * @desc Default maximum DEF. 0 = engine default
  * @default 0
  *
  * @param MaxMAT
  * @type number
- * @desc Default maximum MAT. 0 = unlimited
+ * @desc Default maximum MAT. 0 = engine default
  * @default 0
  *
  * @param MaxMDF
  * @type number
- * @desc Default maximum MDF. 0 = unlimited
+ * @desc Default maximum MDF. 0 = engine default
  * @default 0
  *
  * @param MaxAGI
  * @type number
- * @desc Default maximum AGI. 0 = unlimited
+ * @desc Default maximum AGI. 0 = engine default
  * @default 0
  *
  * @param MaxLUK
  * @type number
- * @desc Default maximum LUK. 0 = unlimited
+ * @desc Default maximum LUK. 0 = engine default
  * @default 0
 
  * @param RelationshipTabName
@@ -99,9 +99,11 @@
  *   VCF_SET_LEVEL a lv     # Set actor a level to lv
  *   VCF_SET_GOLD v         # Set party gold to v
  *   VCF_ADD_GOLD v         # Add v gold to party
+ *   VCF_SET_RELATION a b type value  # Set relation points
+ *   VCF_ADD_RELATION a b type value  # Add relation points
  *
  * Plugin Parameters allow setting default limits for levels and stats.
- * A value of 0 means the parameter is unlimited.
+ * A value of 0 uses the engine default instead of breaking the limit.
  * Actors can override these using the following notetags:
  *   <MaxLevel:n>
  *   <MinimalLevel:n> or <MinLevel:n>
@@ -109,6 +111,7 @@
  *   <MaxATK:n> <MaxDEF:n>
  *   <MaxMAT:n> <MaxMDF:n>
  *   <MaxAGI:n> <MaxLUK:n>
+ *   <Relationship:actorId,category,value>
  */
 
 (function() {
@@ -116,7 +119,7 @@
 
     function parseLimit(v) {
         const n = Number(v || 0);
-        return n > 0 ? n : Number.MAX_SAFE_INTEGER;
+        return isNaN(n) ? 0 : n;
     }
 
     const defaults = {
@@ -172,7 +175,48 @@
                     parseLimit(actor.meta.MaxLUK || defaults.maxParams[7])
                 ]
             };
+            actor.vcfRelationDefaults = {};
+            const re = /<Relationship:\s*(\d+)\s*,\s*(friend|lover|rival|acquaintance)\s*,\s*(\d+)\s*>/ig;
+            let m;
+            while ((m = re.exec(actor.note)) !== null) {
+                const id = Number(m[1]);
+                const type = m[2].toLowerCase();
+                const val = Number(m[3]);
+                if (!actor.vcfRelationDefaults[id]) {
+                    actor.vcfRelationDefaults[id] = {friend:0,lover:0,rival:0,acquaintance:0};
+                }
+                actor.vcfRelationDefaults[id][type] = val;
+            }
         });
+    };
+
+    // --------------------------------------------------
+    // Relationship data
+    // --------------------------------------------------
+    Game_Actor.prototype.initVcfRelations = function() {
+        this._vcfRelations = JsonEx.makeDeepCopy(this.actor().vcfRelationDefaults || {});
+    };
+
+    const _VCF_CoreEngine_Game_Actor_setup = Game_Actor.prototype.setup;
+    Game_Actor.prototype.setup = function(actorId) {
+        _VCF_CoreEngine_Game_Actor_setup.call(this, actorId);
+        this.initVcfRelations();
+    };
+
+    Game_Actor.prototype.relation = function(otherId, type) {
+        const rel = this._vcfRelations?.[otherId];
+        return rel ? (rel[type] || 0) : 0;
+    };
+
+    Game_Actor.prototype.setRelation = function(otherId, type, value) {
+        if (!this._vcfRelations[otherId]) {
+            this._vcfRelations[otherId] = {friend:0,lover:0,rival:0,acquaintance:0};
+        }
+        this._vcfRelations[otherId][type] = value;
+    };
+
+    Game_Actor.prototype.addRelation = function(otherId, type, value) {
+        this.setRelation(otherId, type, this.relation(otherId, type) + value);
     };
 
     // --------------------------------------------------
@@ -232,6 +276,12 @@
             case 'VCF_ADD_GOLD':
                 $gameParty.gainGold(Number(args[0]));
                 break;
+            case 'VCF_SET_RELATION':
+                setRelation(Number(args[0]), Number(args[1]), args[2], Number(args[3]));
+                break;
+            case 'VCF_ADD_RELATION':
+                addRelation(Number(args[0]), Number(args[1]), args[2], Number(args[3]));
+                break;
         }
     };
 
@@ -259,6 +309,16 @@
         if (actor) {
             actor.changeLevel(level, false);
         }
+    }
+
+    function setRelation(aId, bId, type, value) {
+        const actor = actorById(aId);
+        if (actor) actor.setRelation(bId, type.toLowerCase(), value);
+    }
+
+    function addRelation(aId, bId, type, value) {
+        const actor = actorById(aId);
+        if (actor) actor.addRelation(bId, type.toLowerCase(), value);
     }
 
     // --------------------------------------------------
@@ -343,19 +403,30 @@
     // --------------------------------------------------
     // Stat and level limits
     // --------------------------------------------------
+    const _Game_BattlerBase_paramMax = Game_BattlerBase.prototype.paramMax;
     Game_BattlerBase.prototype.paramMax = function(paramId) {
-        const limit = this.isActor() && this.actor().vcfLimits
-            ? this.actor().vcfLimits.maxParams[paramId]
-            : Number.MAX_SAFE_INTEGER;
-        return limit > 0 ? limit : Number.MAX_SAFE_INTEGER;
+        const actor = this.isActor() ? this.actor() : null;
+        if (actor && actor.vcfLimits) {
+            const limit = actor.vcfLimits.maxParams[paramId];
+            if (limit > 0) return limit;
+        }
+        return _Game_BattlerBase_paramMax.call(this, paramId);
     };
 
+    const _Game_Actor_maxLevel = Game_Actor.prototype.maxLevel;
     Game_Actor.prototype.maxLevel = function() {
-        return this.actor().vcfLimits ? this.actor().vcfLimits.maxLevel : 99;
+        if (this.actor().vcfLimits && this.actor().vcfLimits.maxLevel > 0) {
+            return this.actor().vcfLimits.maxLevel;
+        }
+        return _Game_Actor_maxLevel.call(this);
     };
 
+    const _Game_Actor_minLevel = Game_Actor.prototype.minLevel || function(){return 1;};
     Game_Actor.prototype.minLevel = function() {
-        return this.actor().vcfLimits ? this.actor().vcfLimits.minLevel : 1;
+        if (this.actor().vcfLimits && this.actor().vcfLimits.minLevel > 0) {
+            return this.actor().vcfLimits.minLevel;
+        }
+        return _Game_Actor_minLevel.call(this);
     };
 
     const _Game_Actor_changeLevel = Game_Actor.prototype.changeLevel;
