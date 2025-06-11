@@ -36,14 +36,21 @@
  *   - Grenade and throwable items can be created from materials.
  *   - Optional Craft command in the main menu.
  *   - Unique item tab in the item scene with <UniqueId:x> notetag.
- *
+ *   - Recipe Books, Smithing Guides, and Armory Blueprints gate crafting.
+ *   - Item, weapon, and armor storage for overflow inventory.
+*
  * Plugin Commands:
  *   VCF_SET_DURABILITY itemId value  # Set current durability
  *   VCF_REPAIR itemId                # Restore durability to default
  *   VCF_CRAFT itemId                 # Craft item if materials present
  *   VCF_DISMANTLE itemId             # Break item down into materials
  *   VCF_ENHANCE itemId amount        # Increase enhancement level
- */
+ *   VCF_LEARN_BOOK id               # Learn a recipe book
+ *   VCF_LEARN_GUIDE id              # Learn a smithing guide
+ *   VCF_LEARN_BLUEPRINT id          # Learn an armory blueprint
+ *   VCF_STORE type id amount        # Store item/weapon/armor
+ *   VCF_RETRIEVE type id amount     # Retrieve from storage
+*/
 
 (function() {
     const params = PluginManager.parameters('VCF_ItemCore');
@@ -75,8 +82,11 @@
             item.vcfSynthesis = parseIdList(item.meta.Synthesis);
             item.vcfDismantle = parseIdList(item.meta.Dismantle);
             item.vcfUniqueId = item.meta.UniqueId || null;
-        });
-    };
+            item.vcfRecipeBook = Number(item.meta.RecipeBook || 0);
+            item.vcfSmithingGuide = Number(item.meta.SmithingGuide || 0);
+            item.vcfBlueprint = Number(item.meta.ArmoryBlueprint || item.meta.Blueprint || 0);
+       });
+   };
 
     function parseIdList(text) {
         if (!text) return [];
@@ -91,6 +101,8 @@
         _Game_Party_initialize.call(this);
         this._vcfDurability = {};
         this._vcfEnhance = {};
+        this._vcfRecipes = { books: [], guides: [], blueprints: [] };
+        this._vcfStorage = { items: {}, weapons: {}, armors: {} };
     };
 
     Game_Party.prototype.itemDurability = function(itemId) {
@@ -112,6 +124,49 @@
 
     Game_Party.prototype.addEnhancement = function(itemId, amount) {
         this._vcfEnhance[itemId] = (this._vcfEnhance[itemId] || 0) + amount;
+    };
+
+    Game_Party.prototype.learnRecipeBook = function(id) {
+        if (!this._vcfRecipes.books.includes(id)) this._vcfRecipes.books.push(id);
+    };
+
+    Game_Party.prototype.learnSmithingGuide = function(id) {
+        if (!this._vcfRecipes.guides.includes(id)) this._vcfRecipes.guides.push(id);
+    };
+
+    Game_Party.prototype.learnBlueprint = function(id) {
+        if (!this._vcfRecipes.blueprints.includes(id)) this._vcfRecipes.blueprints.push(id);
+    };
+
+    Game_Party.prototype.knowsRecipeFor = function(item) {
+        if (item.vcfRecipeBook) return this._vcfRecipes.books.includes(item.vcfRecipeBook);
+        if (item.vcfSmithingGuide) return this._vcfRecipes.guides.includes(item.vcfSmithingGuide);
+        if (item.vcfBlueprint) return this._vcfRecipes.blueprints.includes(item.vcfBlueprint);
+        return true;
+    };
+
+    Game_Party.prototype.storageContainer = function(item) {
+        if (DataManager.isItem(item)) return this._vcfStorage.items;
+        if (DataManager.isWeapon(item)) return this._vcfStorage.weapons;
+        if (DataManager.isArmor(item)) return this._vcfStorage.armors;
+        return null;
+    };
+
+    Game_Party.prototype.storeItem = function(item, amount) {
+        const store = this.storageContainer(item);
+        if (store) {
+            store[item.id] = (store[item.id] || 0) + amount;
+            this.loseItem(item, amount, false);
+        }
+    };
+
+    Game_Party.prototype.retrieveItem = function(item, amount) {
+        const store = this.storageContainer(item);
+        if (store && store[item.id]) {
+            const take = Math.min(store[item.id], amount);
+            store[item.id] -= take;
+            this.gainItem(item, take, false);
+        }
     };
 
     // --------------------------------------------------
@@ -137,12 +192,28 @@
             case 'VCF_ENHANCE':
                 $gameParty.addEnhancement(Number(args[0]), Number(args[1] || 1));
                 break;
+            case 'VCF_LEARN_BOOK':
+                $gameParty.learnRecipeBook(Number(args[0]));
+                break;
+            case 'VCF_LEARN_GUIDE':
+                $gameParty.learnSmithingGuide(Number(args[0]));
+                break;
+            case 'VCF_LEARN_BLUEPRINT':
+                $gameParty.learnBlueprint(Number(args[0]));
+                break;
+            case 'VCF_STORE':
+                storeRetrieveItem('store', args);
+                break;
+            case 'VCF_RETRIEVE':
+                storeRetrieveItem('retrieve', args);
+                break;
         }
     };
 
     function craftItem(itemId) {
         const item = $dataItems[itemId] || $dataWeapons[itemId] || $dataArmors[itemId];
         if (!item) return;
+        if (!$gameParty.knowsRecipeFor(item)) return;
         const materials = item.vcfSynthesis;
         const haveAll = materials.every(id => $gameParty.numItems($dataItems[id]) > 0);
         if (haveAll) {
@@ -159,6 +230,19 @@
             $gameParty.loseItem(item, 1);
             list.forEach(id => $gameParty.gainItem($dataItems[id], 1));
         }
+    }
+
+    function storeRetrieveItem(mode, args) {
+        const type = args[0];
+        const id = Number(args[1]);
+        const amt = Number(args[2] || 1);
+        let item;
+        if (type === 'item') item = $dataItems[id];
+        else if (type === 'weapon') item = $dataWeapons[id];
+        else if (type === 'armor') item = $dataArmors[id];
+        if (!item) return;
+        if (mode === 'store') $gameParty.storeItem(item, amt);
+        else $gameParty.retrieveItem(item, amt);
     }
 
     // --------------------------------------------------
@@ -213,7 +297,7 @@
     const _Window_ItemList_includes = Window_ItemList.prototype.includes;
     Window_ItemList.prototype.includes = function(item) {
         if (this._vcfCraftMode) {
-            return item && item.vcfSynthesis && item.vcfSynthesis.length > 0;
+            return item && item.vcfSynthesis && item.vcfSynthesis.length > 0 && $gameParty.knowsRecipeFor(item);
         }
         if (this._category === 'unique') {
             return item && item.vcfUniqueId;
