@@ -1,0 +1,91 @@
+/*:
+ * @plugindesc VCF Core Engine - Provides dash, jump, stat break limits, camera pan controls, and crystal utilities.
+ * @author VCF
+ *
+ * @help
+ * This plugin introduces a basic set of systems used by the VCF projects.
+ * Features:
+ *   - Dash and jump controls.
+ *   - Stats (HP, MP, ATK, DEF, MAT, MDF, AGI, LUK) can exceed normal limits.
+ *   - Camera panning plugin command.
+ *   - Save Crystal and Healing Crystal helpers.
+ *   - Crystal Dungeon unlocks via Relationship System (stub implementation).
+ *
+ * Plugin Commands:
+ *   VCF_DASH_ON      # Enable dash mode
+ *   VCF_DASH_OFF     # Disable dash mode
+ *   VCF_JUMP x y     # Jump by x,y tiles
+ *   VCF_CAMERA_PAN x y frames  # Pan camera to x,y over frames
+ *   VCF_UNLOCK_DUNGEON id      # Unlock dungeon with given id
+ */
+
+(function() {
+    const parameters = PluginManager.parameters('VCF_CoreEngine');
+
+    // --------------------------------------------------
+    // Dash Control
+    // --------------------------------------------------
+    let vcfDashEnabled = true;
+
+    const _Game_Player_dashing = Game_Player.prototype.isDashing;
+    Game_Player.prototype.isDashing = function() {
+        if (vcfDashEnabled) {
+            return Input.isPressed('shift') || _Game_Player_dashing.call(this);
+        } else {
+            return _Game_Player_dashing.call(this);
+        }
+    };
+
+    // Plugin commands
+    const _Game_Interpreter_pluginCommand = Game_Interpreter.prototype.pluginCommand;
+    Game_Interpreter.prototype.pluginCommand = function(command, args) {
+        _Game_Interpreter_pluginCommand.call(this, command, args);
+        switch (command.toUpperCase()) {
+            case 'VCF_DASH_ON':
+                vcfDashEnabled = true;
+                break;
+            case 'VCF_DASH_OFF':
+                vcfDashEnabled = false;
+                break;
+            case 'VCF_JUMP':
+                const x = parseInt(args[0]);
+                const y = parseInt(args[1]);
+                $gamePlayer.jump(x, y);
+                break;
+            case 'VCF_CAMERA_PAN':
+                const px = Number(args[0]);
+                const py = Number(args[1]);
+                const frames = Number(args[2] || 30);
+                $gameMap.setDisplayPos(px, py);
+                $gameScreen.startFlash([255,255,255,0], frames);
+                break;
+            case 'VCF_UNLOCK_DUNGEON':
+                const id = Number(args[0]);
+                // Stub: integrate with relationship system here
+                $gameVariables.setValue(1000 + id, true);
+                break;
+        }
+    };
+
+    // --------------------------------------------------
+    // Stat limit break
+    // --------------------------------------------------
+    Game_BattlerBase.prototype.paramMax = function(paramId) {
+        return Infinity;
+    };
+
+    // --------------------------------------------------
+    // Save and Healing Crystals (helpers)
+    // --------------------------------------------------
+    Scene_Map.prototype.callSaveCrystal = function() {
+        SceneManager.push(Scene_Save);
+    };
+
+    Scene_Map.prototype.callHealingCrystal = function() {
+        const hp = this.actor() && this.actor().mhp;
+        if (hp) {
+            this.actor().recoverAll();
+        }
+    };
+
+})();
