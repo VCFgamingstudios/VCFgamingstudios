@@ -36,6 +36,8 @@
  *   VCF_ADD_LP actorId type amount      # Add license points
  *   VCF_SET_LP actorId type value       # Set license points
  *   VCF_BOOST_LP actorId type percent   # Multiply LP by 1+percent/100
+ *   VCF_REMOVE_LP actorId type amount   # Subtract license points
+ *   VCF_RESET_LICENSE actorId type      # Reset rank and points
 */
 (function() {
     const pluginName = 'VCF_WeaponCore';
@@ -136,6 +138,14 @@
         if (w) this.addLicensePoints(w.vcfLicenseType, 1);
     };
 
+    Game_Actor.prototype.loseEscapeLicense = function() {
+        const w = this.weapons()[0];
+        if (w) {
+            const type = w.vcfLicenseType;
+            this._vcfLicensePoints[type] = Math.max(0, (this._vcfLicensePoints[type] || 0) - 1);
+        }
+    };
+
     const _Game_Actor_onBattleEnd = Game_Actor.prototype.onBattleEnd;
     Game_Actor.prototype.onBattleEnd = function() {
         _Game_Actor_onBattleEnd.call(this);
@@ -217,6 +227,23 @@
         }
     });
 
+    PluginManager.registerCommand(pluginName, 'VCF_REMOVE_LP', args => {
+        const actor = $gameActors.actor(Number(args.actorId));
+        const type = parseLicenseType(args.type);
+        if (actor && type != null) {
+            actor.setLicensePoints(type, Math.max(0, actor.licensePoints(type) - Number(args.amount)));
+        }
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_RESET_LICENSE', args => {
+        const actor = $gameActors.actor(Number(args.actorId));
+        const type = parseLicenseType(args.type);
+        if (actor && type != null) {
+            actor._vcfLicenseRanks[type] = 0;
+            actor._vcfLicensePoints[type] = 0;
+        }
+    });
+
     // --------------------------------------------------
     // LP HUD
     // --------------------------------------------------
@@ -256,5 +283,14 @@
     Scene_Map.prototype.update = function() {
         _Scene_Map_update.call(this);
         if (this._licenseHud) this._licenseHud.refresh();
+    };
+
+    const _BattleManager_processEscape = BattleManager.processEscape;
+    BattleManager.processEscape = function() {
+        const success = _BattleManager_processEscape.call(this);
+        if (success) {
+            $gameParty.members().forEach(a => a.loseEscapeLicense());
+        }
+        return success;
     };
 })();
