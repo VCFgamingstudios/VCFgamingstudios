@@ -252,6 +252,16 @@
         _Game_Actor_changeLevel.call(this, clamped, show);
     };
 
+    // Clamp base parameters when level exceeds class data
+    const _Game_Actor_paramBase = Game_Actor.prototype.paramBase;
+    Game_Actor.prototype.paramBase = function(paramId) {
+        const params = this.currentClass().params[paramId];
+        if (this._level >= params.length) {
+            return params[params.length - 1];
+        }
+        return _Game_Actor_paramBase.call(this, paramId);
+    };
+
     // --------------------------------------------------
     // Save and Healing Crystals (helpers)
     // --------------------------------------------------
