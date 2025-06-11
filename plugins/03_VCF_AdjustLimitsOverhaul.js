@@ -3,6 +3,16 @@
  * @plugindesc VCF Adjust Limits Overhaul - extends VCF_CoreEngine with base stat notetags and extra parameters.
  * @author VCF
  *
+ * @param DashSpCost
+ * @type number
+ * @desc SP consumed per frame while dashing.
+ * @default 1
+
+ * @param JumpSpCost
+ * @type number
+ * @desc SP cost to jump.
+ * @default 10
+ *
  * @help
  * Actors can specify initial parameter bonuses with notetags such as
  *   <ATK:50>
@@ -22,6 +32,10 @@
  */
 (function() {
     const pluginName = 'VCF_AdjustLimitsOverhaul';
+
+    const params = PluginManager.parameters(pluginName);
+    const dashCost = Number(params['DashSpCost'] || 1);
+    const jumpCost = Number(params['JumpSpCost'] || 10);
 
     const paramNames = ['MHP','MMP','ATK','DEF','MAT','MDF','AGI','LUK'];
     const extraNames = ['SP','DEX','VIG','CHA','WIS','INT','PRE'];
@@ -130,7 +144,7 @@
         const actor = $gameParty.leader();
         if (!actor) return;
         if (this.isDashing() && this.isMoving()) {
-            actor.setSp(actor.sp() - 1);
+            actor.setSp(actor.sp() - dashCost);
         } else if (actor.sp() < actor.maxSp()) {
             actor.setSp(actor.sp() + 1);
         }
@@ -139,8 +153,8 @@
     const _Game_Player_jump = Game_Player.prototype.jump;
     Game_Player.prototype.jump = function(xPlus, yPlus) {
         const actor = $gameParty.leader();
-        if (actor && actor.sp() >= 10) {
-            actor.setSp(actor.sp() - 10);
+        if (actor && actor.sp() >= jumpCost) {
+            actor.setSp(actor.sp() - jumpCost);
             _Game_Player_jump.call(this, xPlus, yPlus);
         }
     };
@@ -149,10 +163,10 @@
     // HP/MP/SP HUD
     // --------------------------------------------------
     function Window_VcfStatusHud(rect) {
-        Window_Base.call(this, rect);
+        Window_StatusBase.call(this, rect);
         this.refresh();
     }
-    Window_VcfStatusHud.prototype = Object.create(Window_Base.prototype);
+    Window_VcfStatusHud.prototype = Object.create(Window_StatusBase.prototype);
     Window_VcfStatusHud.prototype.constructor = Window_VcfStatusHud;
 
     Window_VcfStatusHud.prototype.refresh = function() {
@@ -192,6 +206,16 @@
         _Scene_Map_update.call(this);
         if (this._vcfStatusHud) this._vcfStatusHud.refresh();
     };
+
+    PluginManager.registerCommand(pluginName, 'VCF_SET_SP', args => {
+        const actor = $gameActors.actor(Number(args.actorId));
+        if (actor) actor.setSp(Number(args.value));
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_ADD_SP', args => {
+        const actor = $gameActors.actor(Number(args.actorId));
+        if (actor) actor.setSp(actor.sp() + Number(args.value));
+    });
 
     window.VCF = window.VCF || {};
     VCF.dexDamage = function(a, b) {
