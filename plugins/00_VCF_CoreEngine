@@ -12,11 +12,16 @@
  *   - Crystal Dungeon unlocks via Relationship System (stub implementation).
  *
  * Plugin Commands:
- *   VCF_DASH_ON      # Enable dash mode
- *   VCF_DASH_OFF     # Disable dash mode
- *   VCF_JUMP x y     # Jump by x,y tiles
- *   VCF_CAMERA_PAN x y frames  # Pan camera to x,y over frames
- *   VCF_UNLOCK_DUNGEON id      # Unlock dungeon with given id
+ *   VCF_DASH_ON            # Enable dash mode
+ *   VCF_DASH_OFF           # Disable dash mode
+ *   VCF_JUMP x y           # Jump by x,y tiles
+ *   VCF_CAMERA_PAN x y f   # Pan camera to x,y over f frames
+ *   VCF_UNLOCK_DUNGEON id  # Unlock dungeon with given id
+ *   VCF_SET_PARAM a p v    # Set actor a param p to v
+ *   VCF_ADD_PARAM a p v    # Add v to actor a param p
+ *   VCF_SET_LEVEL a lv     # Set actor a level to lv
+ *   VCF_SET_GOLD v         # Set party gold to v
+ *   VCF_ADD_GOLD v         # Add v gold to party
  */
 
 (function() {
@@ -64,8 +69,49 @@
                 // Stub: integrate with relationship system here
                 $gameVariables.setValue(1000 + id, true);
                 break;
+            case 'VCF_SET_PARAM':
+                setActorParam(Number(args[0]), Number(args[1]), Number(args[2]));
+                break;
+            case 'VCF_ADD_PARAM':
+                addActorParam(Number(args[0]), Number(args[1]), Number(args[2]));
+                break;
+            case 'VCF_SET_LEVEL':
+                setActorLevel(Number(args[0]), Number(args[1]));
+                break;
+            case 'VCF_SET_GOLD':
+                $gameParty._gold = Number(args[0]);
+                break;
+            case 'VCF_ADD_GOLD':
+                $gameParty.gainGold(Number(args[0]));
+                break;
         }
     };
+
+    function actorById(id) {
+        return $gameActors.actor(id);
+    }
+
+    function setActorParam(actorId, paramId, value) {
+        const actor = actorById(actorId);
+        if (actor) {
+            const diff = value - actor.paramBase(paramId);
+            actor.addParam(paramId, diff);
+        }
+    }
+
+    function addActorParam(actorId, paramId, value) {
+        const actor = actorById(actorId);
+        if (actor) {
+            actor.addParam(paramId, value);
+        }
+    }
+
+    function setActorLevel(actorId, level) {
+        const actor = actorById(actorId);
+        if (actor) {
+            actor.changeLevel(level, false);
+        }
+    }
 
     // --------------------------------------------------
     // Stat limit break
