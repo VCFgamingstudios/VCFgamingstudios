@@ -53,6 +53,31 @@
  * @type number
  * @desc Default maximum LUK. 0 = unlimited
  * @default 0
+
+ * @param RelationshipTabName
+ * @type string
+ * @desc Label for the Relationships command in the menu.
+ * @default Relationships
+
+ * @param FriendLabel
+ * @type string
+ * @desc Display name for the Friend category.
+ * @default Friend
+
+ * @param LoverLabel
+ * @type string
+ * @desc Display name for the Lover category.
+ * @default Lover
+
+ * @param RivalLabel
+ * @type string
+ * @desc Display name for the Rival category.
+ * @default Rival
+
+ * @param AcquaintanceLabel
+ * @type string
+ * @desc Display name for the Acquaintance category.
+ * @default Acquaintance
  *
  * @help
  * This plugin introduces a basic set of systems used by the VCF projects.
@@ -91,7 +116,7 @@
 
     function parseLimit(v) {
         const n = Number(v || 0);
-        return n > 0 ? n : Infinity;
+        return n > 0 ? n : Number.MAX_SAFE_INTEGER;
     }
 
     const defaults = {
@@ -107,6 +132,14 @@
             parseLimit(parameters['MaxAGI']),
             parseLimit(parameters['MaxLUK'])
         ]
+    };
+
+    const relTabName = String(parameters['RelationshipTabName'] || 'Relationships');
+    const relLabels = {
+        friend: String(parameters['FriendLabel'] || 'Friend'),
+        lover: String(parameters['LoverLabel'] || 'Lover'),
+        rival: String(parameters['RivalLabel'] || 'Rival'),
+        acquaintance: String(parameters['AcquaintanceLabel'] || 'Acquaintance')
     };
 
     // --------------------------------------------------
@@ -229,13 +262,92 @@
     }
 
     // --------------------------------------------------
+    // Menu - Relationship tab
+    // --------------------------------------------------
+    const _Window_MenuCommand_addOriginalCommands = Window_MenuCommand.prototype.addOriginalCommands;
+    Window_MenuCommand.prototype.addOriginalCommands = function() {
+        _Window_MenuCommand_addOriginalCommands.call(this);
+        this.addCommand(relTabName, 'vcfRelationship');
+    };
+
+    const _Scene_Menu_createCommandWindow = Scene_Menu.prototype.createCommandWindow;
+    Scene_Menu.prototype.createCommandWindow = function() {
+        _Scene_Menu_createCommandWindow.call(this);
+        this._commandWindow.setHandler('vcfRelationship', this.commandRelationship.bind(this));
+    };
+
+    Scene_Menu.prototype.commandRelationship = function() {
+        SceneManager.push(Scene_VcfRelationship);
+    };
+
+    function Scene_VcfRelationship() {
+        this.initialize(...arguments);
+    }
+    Scene_VcfRelationship.prototype = Object.create(Scene_MenuBase.prototype);
+    Scene_VcfRelationship.prototype.constructor = Scene_VcfRelationship;
+
+    Scene_VcfRelationship.prototype.initialize = function() {
+        Scene_MenuBase.prototype.initialize.call(this);
+    };
+
+    Scene_VcfRelationship.prototype.create = function() {
+        Scene_MenuBase.prototype.create.call(this);
+        this.createCommandWindow();
+    };
+
+    Scene_VcfRelationship.prototype.createCommandWindow = function() {
+        const rect = this.commandWindowRect();
+        this._commandWindow = new Window_RelationshipCommand(rect);
+        this._commandWindow.setHandler('cancel', this.popScene.bind(this));
+        this.addWindow(this._commandWindow);
+    };
+
+    Scene_VcfRelationship.prototype.commandWindowRect = function() {
+        const ww = 240;
+        const wh = this.calcWindowHeight(5, true);
+        const wx = (Graphics.boxWidth - ww) / 2;
+        const wy = (Graphics.boxHeight - wh) / 2;
+        return new Rectangle(wx, wy, ww, wh);
+    };
+
+    function Window_RelationshipCommand(rect) {
+        Window_Command.call(this, rect);
+    }
+    Window_RelationshipCommand.prototype = Object.create(Window_Command.prototype);
+    Window_RelationshipCommand.prototype.constructor = Window_RelationshipCommand;
+
+    Window_RelationshipCommand.prototype.makeCommandList = function() {
+        this.addCommand(relLabels.friend, 'friend');
+        this.addCommand(relLabels.lover, 'lover');
+        this.addCommand(relLabels.rival, 'rival');
+        this.addCommand(relLabels.acquaintance, 'acquaintance');
+    };
+
+    // --------------------------------------------------
+    // Gauge drawing
+    // --------------------------------------------------
+    const _Window_Base_drawCurrentAndMax = Window_Base.prototype.drawCurrentAndMax;
+    Window_Base.prototype.drawCurrentAndMax = function(current, max, x, y, width, color1, color2) {
+        const valueWidth = Math.max(this.textWidth(String(current)), this.textWidth(String(max)), this.textWidth('000000'));
+        const slashWidth = this.textWidth('/');
+        const x1 = x + width - valueWidth;
+        const x2 = x1 - slashWidth;
+        const x3 = x2 - valueWidth;
+        this.changeTextColor(color1);
+        this.drawText(current, x1, y, valueWidth, 'right');
+        this.changeTextColor(color2);
+        this.drawText('/', x2, y, slashWidth, 'right');
+        this.drawText(max, x3, y, valueWidth, 'right');
+    };
+
+    // --------------------------------------------------
     // Stat and level limits
     // --------------------------------------------------
     Game_BattlerBase.prototype.paramMax = function(paramId) {
-        if (this.isActor() && this.actor().vcfLimits) {
-            return this.actor().vcfLimits.maxParams[paramId] || Infinity;
-        }
-        return Infinity;
+        const limit = this.isActor() && this.actor().vcfLimits
+            ? this.actor().vcfLimits.maxParams[paramId]
+            : Number.MAX_SAFE_INTEGER;
+        return limit > 0 ? limit : Number.MAX_SAFE_INTEGER;
     };
 
     Game_Actor.prototype.maxLevel = function() {
