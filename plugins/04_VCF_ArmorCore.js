@@ -1,195 +1,188 @@
 /*:
  * @target MZ
- * @plugindesc VCF Party Core - Adjust max party size and customize the menu layout.
+ * @plugindesc VCF Armor Core - Provides armor license progression and armor points.
  * @author VCF
  *
- * @param MaxPartyMembers
- * @type number
- * @min 1
- * @max 16
- * @desc Default maximum number of party members.
- * @default 4
- *
- * @param ShowSave
- * @type boolean
- * @desc Display the Save command in the main menu.
- * @default true
- *
- * @param ShowEndGame
- * @type boolean
- * @desc Display the Game End command in the main menu.
- * @default true
- *
- * @param IntegrateEquip
- * @type boolean
- * @desc Move the Equip command inside the Item scene.
- * @default true
- *
- * @param MenuFontFace
+ * @param LicenseNames
  * @type string
- * @desc Font face used for menu windows.
- * @default GameFont
+ * @desc Comma separated list of armor license ranks.
+ * @default Beginner,Adept,Advanced,Master,Prodigy
  *
- * @param MenuFontSize
- * @type number
- * @desc Font size for menu windows.
- * @default 20
- *
- * @param MenuBoxWidth
- * @type number
- * @desc Width of menu command windows.
- * @default 240
- *
- * @param MenuBoxHeight
- * @type number
- * @desc Height of each command row.
- * @default 36
- *
- * @param MenuBgColor
+ * @param LicenseTypes
  * @type string
- * @desc Background color of menu scenes in CSS format.
- * @default #000000
+ * @desc Comma separated list of armor license types.
+ * @default Light,Medium,Heavy
+ *
+ * @param LicenseThreshold
+ * @type number
+ * @desc Battles required to increase armor license rank.
+ * @default 25
+
+ * @param AutoRegenAP
+ * @type boolean
+ * @desc Regenerate armor points to maximum after battle.
+ * @default true
  *
  * @help
- * This plugin lets you increase the battle party size up to 16 members and
- * overhaul the look of the menu. The Save and Game End commands can be hidden
- * and the Equip command can be moved into the Item scene instead of appearing
- * on the main menu.
+ * Armors can require a license rank with <RequiredAL:Rank> and specify
+ * their license type with <ALType:Name>. Each armor may also define
+ * <ArmorPoints:n> that act as a shield before HP is damaged. Actors gain
+ * license points after battles based on their equipped armor. Skills can
+ * tag damage types with <DamageType:PD>, <DamageType:BD>, or
+ * <DamageType:SD>. Damage of these types first subtracts from armor points
+ * before reducing HP. Running from battle decreases weapon license points
+ * by one.
  *
  * Plugin Commands:
- *   VCF_SET_PARTY_SIZE n        # Change the party battle member limit
+ *   VCF_RESTORE_AP actorId          # Refill actor's armor points
  */
 (function() {
-    const pluginName = 'VCF_PartyCoreEngine';
+    const pluginName = 'VCF_ArmorCore';
     const params = PluginManager.parameters(pluginName);
-    const maxMembers = Math.min(16, Math.max(1, Number(params['MaxPartyMembers'] || 4)));
-    const showSave = params['ShowSave'] !== 'false';
-    const showEnd = params['ShowEndGame'] !== 'false';
-    const integrateEquip = params['IntegrateEquip'] !== 'false';
-    const fontFace = params['MenuFontFace'] || 'GameFont';
-    const fontSize = Number(params['MenuFontSize'] || 20);
-    const menuWidth = Number(params['MenuBoxWidth'] || 240);
-    const menuRowHeight = Number(params['MenuBoxHeight'] || 36);
-    const menuBgColor = params['MenuBgColor'] || '#000000';
+    const licenseNames = (params['LicenseNames'] || 'Beginner,Adept,Advanced,Master,Prodigy').split(',').map(n=>n.trim());
+    const licenseTypes = (params['LicenseTypes'] || 'Light,Medium,Heavy').split(',').map(t=>t.trim()).filter(t=>t);
+    const threshold = Number(params['LicenseThreshold'] || 25);
+    const autoRegen = params['AutoRegenAP'] !== 'false';
+    const augmentKeys = ['MHP','MMP','ATK','DEF','MAT','MDF','AGI','LUK'];
 
-    // --------------------------------------------------
-    // Party size
-    // --------------------------------------------------
-    const _Game_Party_initialize = Game_Party.prototype.initialize;
-    Game_Party.prototype.initialize = function() {
-        _Game_Party_initialize.call(this);
-        this._vcfMaxMembers = maxMembers;
+    const _DataManager_isDatabaseLoaded = DataManager.isDatabaseLoaded;
+    DataManager.isDatabaseLoaded = function() {
+        if(!_DataManager_isDatabaseLoaded.call(this)) return false;
+        if(!this._vcfArmorTags){
+            this.processVcfArmorNotetags($dataArmors);
+            this.processVcfDamageTypeNotetags($dataSkills);
+            this.processVcfDamageTypeNotetags($dataItems);
+            this._vcfArmorTags = true;
+        }
+        return true;
     };
 
-    Game_Party.prototype.maxBattleMembers = function() {
-        return this._vcfMaxMembers;
+    DataManager.processVcfArmorNotetags = function(group){
+        group.forEach(a=>{
+            if(!a) return;
+            a.vcfRequiredLicense = parseLicense(a.meta.RequiredAL);
+            a.vcfLicenseType = parseLicenseType(a.meta.ALType);
+            if(a.vcfLicenseType==null) a.vcfLicenseType = 0;
+            a.vcfAp = Number(a.meta.ArmorPoints||0);
+            a.vcfAugments = {};
+            augmentKeys.forEach((k,i)=>{
+                const v = Number(a.meta['Augment'+k]||0);
+                if(v) a.vcfAugments[i]=v;
+            });
+        });
     };
 
-    Game_Party.prototype.setMaxBattleMembers = function(n) {
-        this._vcfMaxMembers = Math.min(16, Math.max(1, Number(n) || maxMembers));
+    DataManager.processVcfDamageTypeNotetags = function(group){
+        group.forEach(s=>{
+            if(!s) return;
+            const type = (s.meta.DamageType||'').toUpperCase();
+            if(['PD','BD','SD'].includes(type)) s.vcfDamageType = type;
+        });
     };
 
-    PluginManager.registerCommand(pluginName, 'VCF_SET_PARTY_SIZE', args => {
-        $gameParty.setMaxBattleMembers(Number(args.n || args.size || maxMembers));
+    function parseLicense(text){
+        if(!text) return 0;
+        const idx = licenseNames.indexOf(text);
+        return idx>=0?idx:Number(text);
+    }
+    function parseLicenseType(text){
+        if(!text) return null;
+        const idx = licenseTypes.indexOf(text);
+        return idx>=0?idx:null;
+    }
+
+    const _Game_Actor_setup = Game_Actor.prototype.setup;
+    Game_Actor.prototype.setup = function(actorId){
+        _Game_Actor_setup.call(this, actorId);
+        this._vcfArmorRanks = Array(licenseTypes.length).fill(0);
+        this._vcfArmorPoints = Array(licenseTypes.length).fill(0);
+        this._vcfAp = 0;
+        this._vcfMaxAp = 0;
+    };
+
+    Game_Actor.prototype.armorRank = function(type){
+        return this._vcfArmorRanks[type??0]||0;
+    };
+    Game_Actor.prototype.armorPointsProgress = function(type){
+        return this._vcfArmorPoints[type??0]||0;
+    };
+    Game_Actor.prototype.addArmorLicensePoints = function(type, amt){
+        if(type==null) return;
+        this._vcfArmorPoints[type]=(this._vcfArmorPoints[type]||0)+amt;
+        while(this._vcfArmorPoints[type]>=threshold && this._vcfArmorRanks[type]<licenseNames.length-1){
+            this._vcfArmorPoints[type]-=threshold;
+            this._vcfArmorRanks[type]++;
+        }
+    };
+    Game_Actor.prototype.setArmorLicensePoints = function(type,val){
+        if(type==null) return;
+        this._vcfArmorPoints[type]=Math.max(0,val);
+    };
+
+    Game_Actor.prototype.refreshArmorPoints = function(){
+        let max=0;
+        this.armors().forEach(a=>{ if(a) max += a.vcfAp||0; });
+        this._vcfMaxAp = max;
+        if(this._vcfAp>max) this._vcfAp = max;
+        if(this._vcfAp==null) this._vcfAp = max;
+    };
+
+    Game_Actor.prototype.ap = function(){ return this._vcfAp||0; };
+    Game_Actor.prototype.maxAp = function(){ return this._vcfMaxAp||0; };
+    Game_Actor.prototype.setAp = function(value){ this._vcfAp = Math.max(0, Math.min(this.maxAp(), value)); };
+
+    const _Game_Actor_refresh = Game_Actor.prototype.refresh;
+    Game_Actor.prototype.refresh = function(){
+        _Game_Actor_refresh.call(this);
+        this.refreshArmorPoints();
+    };
+
+    Game_Actor.prototype.gainArmorLicense = function(){
+        const a = this.armors()[0];
+        if(a) this.addArmorLicensePoints(a.vcfLicenseType,1);
+    };
+
+    const _Game_Actor_onBattleEnd = Game_Actor.prototype.onBattleEnd;
+    Game_Actor.prototype.onBattleEnd = function(){
+        _Game_Actor_onBattleEnd.call(this);
+        this.gainArmorLicense();
+        if (autoRegen) this.setAp(this.maxAp());
+    };
+
+    const _Game_Actor_canEquip = Game_Actor.prototype.canEquip;
+    Game_Actor.prototype.canEquip = function(item){
+        if(DataManager.isArmor(item)){
+            const req = item.vcfRequiredLicense||0;
+            const type = item.vcfLicenseType;
+            if(req>this.armorRank(type)) return false;
+        }
+        return _Game_Actor_canEquip.call(this,item);
+    };
+
+    const _Game_Actor_paramPlus = Game_Actor.prototype.paramPlus;
+    Game_Actor.prototype.paramPlus = function(paramId){
+        let v = _Game_Actor_paramPlus.call(this,paramId);
+        this.armors().forEach(a=>{ if(a&&a.vcfAugments[paramId]) v += a.vcfAugments[paramId]; });
+        return v;
+    };
+
+    // absorb armor points on damage
+    const _Game_Action_executeHpDamage = Game_Action.prototype.executeHpDamage;
+    Game_Action.prototype.executeHpDamage = function(target, value){
+        if(target.isActor() && value>0){
+            const type = this.item().vcfDamageType;
+            if(type && ['PD','BD','SD'].includes(type)){
+                const apLoss = Math.min(target.ap(), value);
+                target.setAp(target.ap() - apLoss);
+                value -= apLoss;
+            }
+        }
+        _Game_Action_executeHpDamage.call(this,target,value);
+    };
+
+    PluginManager.registerCommand(pluginName, 'VCF_RESTORE_AP', args => {
+        const actor = $gameActors.actor(Number(args.actorId));
+        if (actor) actor.setAp(actor.maxAp());
     });
 
-    // --------------------------------------------------
-    // Menu appearance
-    // --------------------------------------------------
-    const _Window_Base_standardFontFace = Window_Base.prototype.standardFontFace;
-    Window_Base.prototype.standardFontFace = function() {
-        if (SceneManager._scene instanceof Scene_MenuBase) {
-            return fontFace;
-        }
-        return _Window_Base_standardFontFace.call(this);
-    };
-
-    const _Window_Base_standardFontSize = Window_Base.prototype.standardFontSize;
-    Window_Base.prototype.standardFontSize = function() {
-        if (SceneManager._scene instanceof Scene_MenuBase) {
-            return fontSize;
-        }
-        return _Window_Base_standardFontSize.call(this);
-    };
-
-    const _Window_MenuCommand_windowWidth = Window_MenuCommand.prototype.windowWidth;
-    Window_MenuCommand.prototype.windowWidth = function() {
-        return menuWidth;
-    };
-
-    Window_MenuCommand.prototype.itemHeight = function() {
-        return menuRowHeight;
-    };
-
-    const _Scene_MenuBase_createBackground = Scene_MenuBase.prototype.createBackground;
-    Scene_MenuBase.prototype.createBackground = function() {
-        _Scene_MenuBase_createBackground.call(this);
-        if (menuBgColor) {
-            const sprite = new Sprite(new Bitmap(Graphics.width, Graphics.height));
-            sprite.bitmap.fillAll(menuBgColor);
-            this.addChildAt(sprite, 0);
-        }
-    };
-
-    // --------------------------------------------------
-    // Menu commands
-    // --------------------------------------------------
-    const _Window_MenuCommand_addSaveCommand = Window_MenuCommand.prototype.addSaveCommand;
-    Window_MenuCommand.prototype.addSaveCommand = function() {
-        if (showSave) _Window_MenuCommand_addSaveCommand.call(this);
-    };
-
-    const _Window_MenuCommand_addGameEndCommand = Window_MenuCommand.prototype.addGameEndCommand;
-    Window_MenuCommand.prototype.addGameEndCommand = function() {
-        if (showEnd) _Window_MenuCommand_addGameEndCommand.call(this);
-    };
-
-    if (integrateEquip) {
-        const _Window_MenuCommand_addMainCommands = Window_MenuCommand.prototype.addMainCommands;
-        Window_MenuCommand.prototype.addMainCommands = function() {
-            _Window_MenuCommand_addMainCommands.call(this);
-            this._list = this._list.filter(cmd => cmd.symbol !== 'equip');
-        };
-
-        const _Scene_Menu_commandItem = Scene_Menu.prototype.commandItem;
-        Scene_Menu.prototype.commandItem = function() {
-            _Scene_Menu_commandItem.call(this);
-            if (this._commandWindow && !this._commandWindow.currentExt()) {
-                SceneManager.push(Scene_Equip);
-            }
-        };
-
-        const _Scene_Item_create = Scene_Item.prototype.create;
-        Scene_Item.prototype.create = function() {
-            _Scene_Item_create.call(this);
-            this.createEquipCommand();
-        };
-
-        Scene_Item.prototype.createEquipCommand = function() {
-            const rect = this.equipCommandWindowRect();
-            this._equipCommandWindow = new Window_Command(rect);
-            this._equipCommandWindow.setHandler('equip', this.commandEquip.bind(this));
-            this._equipCommandWindow.setHandler('cancel', this.onEquipCancel.bind(this));
-            this._equipCommandWindow.addCommand(TextManager.equip, 'equip');
-            this.addWindow(this._equipCommandWindow);
-        };
-
-        Scene_Item.prototype.equipCommandWindowRect = function() {
-            const ww = 160;
-            const wh = this.calcWindowHeight(1, true);
-            const wx = Graphics.boxWidth - ww;
-            const wy = this._categoryWindow.y;
-            return new Rectangle(wx, wy, ww, wh);
-        };
-
-        Scene_Item.prototype.commandEquip = function() {
-            SceneManager.push(Scene_Equip);
-        };
-
-        Scene_Item.prototype.onEquipCancel = function() {
-            this._equipCommandWindow.close();
-            this._equipCommandWindow.deactivate();
-            this.activateItemWindow();
-        };
-    }
 })();
