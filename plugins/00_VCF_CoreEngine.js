@@ -1,4 +1,5 @@
 /*:
+ * @target MZ
  * @plugindesc VCF Core Engine - Provides dash, jump, stat break limits, camera pan controls, and crystal utilities.
  * @author VCF
  *
@@ -115,7 +116,8 @@
  */
 
 (function() {
-    const parameters = PluginManager.parameters('VCF_CoreEngine');
+    const pluginName = 'VCF_CoreEngine';
+    const parameters = PluginManager.parameters(pluginName);
 
     function parseLimit(v) {
         const n = Number(v || 0);
@@ -233,57 +235,62 @@
         }
     };
 
-    // Plugin commands
-    const _Game_Interpreter_pluginCommand = Game_Interpreter.prototype.pluginCommand;
-    Game_Interpreter.prototype.pluginCommand = function(command, args) {
-        _Game_Interpreter_pluginCommand.call(this, command, args);
-        switch (command.toUpperCase()) {
-            case 'VCF_DASH_ON':
-                vcfDashEnabled = true;
-                break;
-            case 'VCF_DASH_OFF':
-                vcfDashEnabled = false;
-                break;
-            case 'VCF_JUMP':
-                const x = parseInt(args[0]);
-                const y = parseInt(args[1]);
-                $gamePlayer.jump(x, y);
-                break;
-            case 'VCF_CAMERA_PAN':
-                const px = Number(args[0]);
-                const py = Number(args[1]);
-                const frames = Number(args[2] || 30);
-                $gameMap.setDisplayPos(px, py);
-                $gameScreen.startFlash([255,255,255,0], frames);
-                break;
-            case 'VCF_UNLOCK_DUNGEON':
-                const id = Number(args[0]);
-                // Stub: integrate with relationship system here
-                $gameVariables.setValue(1000 + id, true);
-                break;
-            case 'VCF_SET_PARAM':
-                setActorParam(Number(args[0]), Number(args[1]), Number(args[2]));
-                break;
-            case 'VCF_ADD_PARAM':
-                addActorParam(Number(args[0]), Number(args[1]), Number(args[2]));
-                break;
-            case 'VCF_SET_LEVEL':
-                setActorLevel(Number(args[0]), Number(args[1]));
-                break;
-            case 'VCF_SET_GOLD':
-                $gameParty._gold = Number(args[0]);
-                break;
-            case 'VCF_ADD_GOLD':
-                $gameParty.gainGold(Number(args[0]));
-                break;
-            case 'VCF_SET_RELATION':
-                setRelation(Number(args[0]), Number(args[1]), args[2], Number(args[3]));
-                break;
-            case 'VCF_ADD_RELATION':
-                addRelation(Number(args[0]), Number(args[1]), args[2], Number(args[3]));
-                break;
-        }
-    };
+    // Plugin commands (RPG Maker MZ)
+
+    PluginManager.registerCommand(pluginName, 'VCF_DASH_ON', () => {
+        vcfDashEnabled = true;
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_DASH_OFF', () => {
+        vcfDashEnabled = false;
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_JUMP', args => {
+        const x = Number(args.x || 0);
+        const y = Number(args.y || 0);
+        $gamePlayer.jump(x, y);
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_CAMERA_PAN', args => {
+        const px = Number(args.x || 0);
+        const py = Number(args.y || 0);
+        const frames = Number(args.frames || 30);
+        $gameMap.setDisplayPos(px, py);
+        $gameScreen.startFlash([255, 255, 255, 0], frames);
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_UNLOCK_DUNGEON', args => {
+        const id = Number(args.id || 0);
+        $gameVariables.setValue(1000 + id, true);
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_SET_PARAM', args => {
+        setActorParam(Number(args.actorId), Number(args.paramId), Number(args.value));
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_ADD_PARAM', args => {
+        addActorParam(Number(args.actorId), Number(args.paramId), Number(args.value));
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_SET_LEVEL', args => {
+        setActorLevel(Number(args.actorId), Number(args.level));
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_SET_GOLD', args => {
+        $gameParty._gold = Number(args.value);
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_ADD_GOLD', args => {
+        $gameParty.gainGold(Number(args.value));
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_SET_RELATION', args => {
+        setRelation(Number(args.actorA), Number(args.actorB), String(args.type), Number(args.value));
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_ADD_RELATION', args => {
+        addRelation(Number(args.actorA), Number(args.actorB), String(args.type), Number(args.value));
+    });
 
     function actorById(id) {
         return $gameActors.actor(id);
