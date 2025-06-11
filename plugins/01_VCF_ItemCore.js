@@ -1,4 +1,5 @@
 /*:
+ * @target MZ
  * @plugindesc VCF Item Core - Adds currency types, item durability, crafting,
  * repair, and enhancement systems. Provides notetags for synthesis and
  * dismantling recipes.
@@ -53,7 +54,8 @@
 */
 
 (function() {
-    const params = PluginManager.parameters('VCF_ItemCore');
+    const pluginName = 'VCF_ItemCore';
+    const params = PluginManager.parameters(pluginName);
     const currencyTypes = (params["CurrencyTypes"] || "Gold").split(",").map(t => t.trim());
     const addCraftMenu = params["AddCraftMenu"] !== 'false';
     const craftCommandName = params["CraftCommandName"] || 'Craft';
@@ -170,45 +172,49 @@
     };
 
     // --------------------------------------------------
-    // Plugin Commands
+    // Plugin Commands (RPG Maker MZ)
     // --------------------------------------------------
-    const _Game_Interpreter_pluginCommand = Game_Interpreter.prototype.pluginCommand;
-    Game_Interpreter.prototype.pluginCommand = function(command, args) {
-        _Game_Interpreter_pluginCommand.call(this, command, args);
-        switch (command.toUpperCase()) {
-            case 'VCF_SET_DURABILITY':
-                $gameParty.setItemDurability(Number(args[0]), Number(args[1]));
-                break;
-            case 'VCF_REPAIR':
-                const def = $gameParty.defaultDurability(Number(args[0]));
-                $gameParty.setItemDurability(Number(args[0]), def);
-                break;
-            case 'VCF_CRAFT':
-                craftItem(Number(args[0]));
-                break;
-            case 'VCF_DISMANTLE':
-                dismantleItem(Number(args[0]));
-                break;
-            case 'VCF_ENHANCE':
-                $gameParty.addEnhancement(Number(args[0]), Number(args[1] || 1));
-                break;
-            case 'VCF_LEARN_BOOK':
-                $gameParty.learnRecipeBook(Number(args[0]));
-                break;
-            case 'VCF_LEARN_GUIDE':
-                $gameParty.learnSmithingGuide(Number(args[0]));
-                break;
-            case 'VCF_LEARN_BLUEPRINT':
-                $gameParty.learnBlueprint(Number(args[0]));
-                break;
-            case 'VCF_STORE':
-                storeRetrieveItem('store', args);
-                break;
-            case 'VCF_RETRIEVE':
-                storeRetrieveItem('retrieve', args);
-                break;
-        }
-    };
+
+    PluginManager.registerCommand(pluginName, 'VCF_SET_DURABILITY', args => {
+        $gameParty.setItemDurability(Number(args.id), Number(args.value));
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_REPAIR', args => {
+        const def = $gameParty.defaultDurability(Number(args.id));
+        $gameParty.setItemDurability(Number(args.id), def);
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_CRAFT', args => {
+        craftItem(Number(args.id));
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_DISMANTLE', args => {
+        dismantleItem(Number(args.id));
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_ENHANCE', args => {
+        $gameParty.addEnhancement(Number(args.id), Number(args.amount || 1));
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_LEARN_BOOK', args => {
+        $gameParty.learnRecipeBook(Number(args.id));
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_LEARN_GUIDE', args => {
+        $gameParty.learnSmithingGuide(Number(args.id));
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_LEARN_BLUEPRINT', args => {
+        $gameParty.learnBlueprint(Number(args.id));
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_STORE', args => {
+        storeRetrieveItem('store', [args.type, args.id, args.amount]);
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_RETRIEVE', args => {
+        storeRetrieveItem('retrieve', [args.type, args.id, args.amount]);
+    });
 
     function craftItem(itemId) {
         const item = $dataItems[itemId] || $dataWeapons[itemId] || $dataArmors[itemId];
