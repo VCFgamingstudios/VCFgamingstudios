@@ -2,6 +2,58 @@
  * @plugindesc VCF Core Engine - Provides dash, jump, stat break limits, camera pan controls, and crystal utilities.
  * @author VCF
  *
+ * @param MaxLevel
+ * @type number
+ * @min 1
+ * @desc Default maximum level for actors. 0 = unlimited
+ * @default 99
+ *
+ * @param MinimalLevel
+ * @type number
+ * @min 1
+ * @desc Default minimum level for actors
+ * @default 1
+ *
+ * @param MaxHP
+ * @type number
+ * @desc Default maximum HP. 0 = unlimited
+ * @default 0
+ *
+ * @param MaxMP
+ * @type number
+ * @desc Default maximum MP. 0 = unlimited
+ * @default 0
+ *
+ * @param MaxATK
+ * @type number
+ * @desc Default maximum ATK. 0 = unlimited
+ * @default 0
+ *
+ * @param MaxDEF
+ * @type number
+ * @desc Default maximum DEF. 0 = unlimited
+ * @default 0
+ *
+ * @param MaxMAT
+ * @type number
+ * @desc Default maximum MAT. 0 = unlimited
+ * @default 0
+ *
+ * @param MaxMDF
+ * @type number
+ * @desc Default maximum MDF. 0 = unlimited
+ * @default 0
+ *
+ * @param MaxAGI
+ * @type number
+ * @desc Default maximum AGI. 0 = unlimited
+ * @default 0
+ *
+ * @param MaxLUK
+ * @type number
+ * @desc Default maximum LUK. 0 = unlimited
+ * @default 0
+ *
  * @help
  * This plugin introduces a basic set of systems used by the VCF projects.
  * Features:
@@ -22,10 +74,73 @@
  *   VCF_SET_LEVEL a lv     # Set actor a level to lv
  *   VCF_SET_GOLD v         # Set party gold to v
  *   VCF_ADD_GOLD v         # Add v gold to party
+ *
+ * Plugin Parameters allow setting default limits for levels and stats.
+ * A value of 0 means the parameter is unlimited.
+ * Actors can override these using the following notetags:
+ *   <MaxLevel:n>
+ *   <MinimalLevel:n> or <MinLevel:n>
+ *   <MaxHP:n> <MaxMP:n>
+ *   <MaxATK:n> <MaxDEF:n>
+ *   <MaxMAT:n> <MaxMDF:n>
+ *   <MaxAGI:n> <MaxLUK:n>
  */
 
 (function() {
     const parameters = PluginManager.parameters('VCF_CoreEngine');
+
+    function parseLimit(v) {
+        const n = Number(v || 0);
+        return n > 0 ? n : Infinity;
+    }
+
+    const defaults = {
+        maxLevel: parseLimit(parameters['MaxLevel']),
+        minLevel: Number(parameters['MinimalLevel'] || 1),
+        maxParams: [
+            parseLimit(parameters['MaxHP']),
+            parseLimit(parameters['MaxMP']),
+            parseLimit(parameters['MaxATK']),
+            parseLimit(parameters['MaxDEF']),
+            parseLimit(parameters['MaxMAT']),
+            parseLimit(parameters['MaxMDF']),
+            parseLimit(parameters['MaxAGI']),
+            parseLimit(parameters['MaxLUK'])
+        ]
+    };
+
+    // --------------------------------------------------
+    // Notetag processing
+    // --------------------------------------------------
+    const _DataManager_isDatabaseLoaded = DataManager.isDatabaseLoaded;
+    DataManager.isDatabaseLoaded = function() {
+        if (!_DataManager_isDatabaseLoaded.call(this)) return false;
+        if (!this._vcfNotetagsLoaded) {
+            this.processVcfActorNotetags($dataActors);
+            this._vcfNotetagsLoaded = true;
+        }
+        return true;
+    };
+
+    DataManager.processVcfActorNotetags = function(group) {
+        group.forEach(actor => {
+            if (!actor) return;
+            actor.vcfLimits = {
+                maxLevel: parseLimit(actor.meta.MaxLevel || defaults.maxLevel),
+                minLevel: Number(actor.meta.MinimalLevel || actor.meta.MinLevel || defaults.minLevel),
+                maxParams: [
+                    parseLimit(actor.meta.MaxHP || defaults.maxParams[0]),
+                    parseLimit(actor.meta.MaxMP || defaults.maxParams[1]),
+                    parseLimit(actor.meta.MaxATK || defaults.maxParams[2]),
+                    parseLimit(actor.meta.MaxDEF || defaults.maxParams[3]),
+                    parseLimit(actor.meta.MaxMAT || defaults.maxParams[4]),
+                    parseLimit(actor.meta.MaxMDF || defaults.maxParams[5]),
+                    parseLimit(actor.meta.MaxAGI || defaults.maxParams[6]),
+                    parseLimit(actor.meta.MaxLUK || defaults.maxParams[7])
+                ]
+            };
+        });
+    };
 
     // --------------------------------------------------
     // Dash Control
@@ -114,10 +229,27 @@
     }
 
     // --------------------------------------------------
-    // Stat limit break
+    // Stat and level limits
     // --------------------------------------------------
     Game_BattlerBase.prototype.paramMax = function(paramId) {
+        if (this.isActor() && this.actor().vcfLimits) {
+            return this.actor().vcfLimits.maxParams[paramId] || Infinity;
+        }
         return Infinity;
+    };
+
+    Game_Actor.prototype.maxLevel = function() {
+        return this.actor().vcfLimits ? this.actor().vcfLimits.maxLevel : 99;
+    };
+
+    Game_Actor.prototype.minLevel = function() {
+        return this.actor().vcfLimits ? this.actor().vcfLimits.minLevel : 1;
+    };
+
+    const _Game_Actor_changeLevel = Game_Actor.prototype.changeLevel;
+    Game_Actor.prototype.changeLevel = function(level, show) {
+        const clamped = Math.max(this.minLevel(), Math.min(level, this.maxLevel()));
+        _Game_Actor_changeLevel.call(this, clamped, show);
     };
 
     // --------------------------------------------------
