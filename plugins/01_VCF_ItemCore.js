@@ -38,6 +38,7 @@
  *   - Optional Craft command in the main menu.
  *   - Unique item tab in the item scene with <UniqueId:x> notetag.
  *   - Recipe Books, Smithing Guides, and Armory Blueprints gate crafting.
+ *   - Items may define <RepairCost:n> to charge gold when repaired.
  *   - Item, weapon, and armor storage for overflow inventory.
 *
  * Plugin Commands:
@@ -51,6 +52,7 @@
  *   VCF_LEARN_BLUEPRINT id          # Learn an armory blueprint
  *   VCF_STORE type id amount        # Store item/weapon/armor
  *   VCF_RETRIEVE type id amount     # Retrieve from storage
+ *   VCF_REPAIR_ALL                 # Repair all tracked equipment
 */
 
 (function() {
@@ -87,6 +89,7 @@
             item.vcfRecipeBook = Number(item.meta.RecipeBook || 0);
             item.vcfSmithingGuide = Number(item.meta.SmithingGuide || 0);
             item.vcfBlueprint = Number(item.meta.ArmoryBlueprint || item.meta.Blueprint || 0);
+            item.vcfRepairCost = Number(item.meta.RepairCost || 0);
        });
    };
 
@@ -118,6 +121,21 @@
 
     Game_Party.prototype.setItemDurability = function(itemId, value) {
         this._vcfDurability[itemId] = Math.max(0, value);
+    };
+
+    Game_Party.prototype.repairItem = function(itemId) {
+        const def = this.defaultDurability(itemId);
+        const item = $dataWeapons[itemId] || $dataArmors[itemId];
+        if (!item || def <= 0) return;
+        const cost = item.vcfRepairCost || 0;
+        if ($gameParty.gold() >= cost) {
+            this.loseGold(cost);
+            this.setItemDurability(itemId, def);
+        }
+    };
+
+    Game_Party.prototype.repairAll = function() {
+        Object.keys(this._vcfDurability).forEach(id => this.repairItem(Number(id)));
     };
 
     Game_Party.prototype.itemEnhancement = function(itemId) {
@@ -182,6 +200,10 @@
     PluginManager.registerCommand(pluginName, 'VCF_REPAIR', args => {
         const def = $gameParty.defaultDurability(Number(args.id));
         $gameParty.setItemDurability(Number(args.id), def);
+    });
+
+    PluginManager.registerCommand(pluginName, 'VCF_REPAIR_ALL', () => {
+        $gameParty.repairAll();
     });
 
     PluginManager.registerCommand(pluginName, 'VCF_CRAFT', args => {
